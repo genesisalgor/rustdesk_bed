@@ -26,7 +26,7 @@ jobs:
         run: cargo build --release
 
       - name: Upload EXE
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: rustdesk-custom
           path: target/release/rustdesk.exe
