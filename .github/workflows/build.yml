@@ -8,19 +8,25 @@ jobs:
     runs-on: windows-latest
 
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
       RELAY_SERVER: ${{ vars.RELAY_SERVER }}
       API_SERVER: ${{ vars.API_SERVER }}
       KEY: ${{ vars.KEY }}
 
     steps:
-      - name: Checkout
+      - name: Checkout (com submodules)
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Rust
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Add Rust to PATH (Windows fix)
+        run: echo "%USERPROFILE%\.cargo\bin" >> $env:GITHUB_PATH
 
       - name: Build
         run: cargo build --release
