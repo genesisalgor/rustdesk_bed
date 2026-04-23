@@ -13,6 +13,7 @@ jobs:
       RELAY_SERVER: ${{ vars.RELAY_SERVER }}
       API_SERVER: ${{ vars.API_SERVER }}
       KEY: ${{ vars.KEY }}
+      VCPKG_ROOT: C:\vcpkg
 
     steps:
       - name: Checkout (com submodules)
@@ -20,13 +21,20 @@ jobs:
         with:
           submodules: recursive
 
+      # 🔥 AQUI ESTÁ O QUE FALTAVA
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+
+      - name: Install dependencies
+        run: |
+          C:\vcpkg\vcpkg install opus:x64-windows
+
       - name: Install Rust
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Add Rust to PATH (Windows fix)
-        run: echo "%USERPROFILE%\.cargo\bin" >> $env:GITHUB_PATH
+          echo "%USERPROFILE%\.cargo\bin" >> $env:GITHUB_PATH
 
       - name: Build
         run: cargo build --release
