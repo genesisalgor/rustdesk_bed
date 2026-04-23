@@ -1,0 +1,32 @@
+name: Build RustDesk Custom
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
+      RELAY_SERVER: ${{ vars.RELAY_SERVER }}
+      API_SERVER: ${{ vars.API_SERVER }}
+      KEY: ${{ vars.KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v3
+        with:
+          name: rustdesk-custom
+          path: target/release/rustdesk.exe
