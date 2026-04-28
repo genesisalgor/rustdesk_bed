@@ -8,27 +8,29 @@ jobs:
     runs-on: windows-latest
 
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       VCPKG_ROOT: C:\vcpkg
       VCPKG_FORCE_SYSTEM_BINARIES: 1
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+      VCPKG_FEATURE_FLAGS: "manifests,versions,binarycaching"
       RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
       RELAY_SERVER: ${{ vars.RELAY_SERVER }}
       API_SERVER: ${{ vars.API_SERVER }}
       KEY: ${{ vars.KEY }}
 
     steps:
+      # 📦 Código
       - name: Checkout (com submodules)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install vcpkg (fixed version)
+      # ⚙️ vcpkg (SEM travar versão)
+      - name: Install vcpkg
         run: |
           git clone https://github.com/microsoft/vcpkg C:\vcpkg
-          cd C:\vcpkg
-          git checkout 2024.05.24
-          .\bootstrap-vcpkg.bat
+          C:\vcpkg\bootstrap-vcpkg.bat
 
+      # ⚡ Cache (MUITO importante)
       - name: Cache vcpkg
         uses: actions/cache@v4
         with:
@@ -38,18 +40,22 @@ jobs:
             C:\vcpkg\buildtrees
           key: vcpkg-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
 
+      # 🔧 Instalar deps (com retry)
       - name: Install dependencies
         run: |
-          C:\vcpkg\vcpkg install || C:\vcpkg\vcpkg install
+          C:\vcpkg\vcpkg install --clean-after-build || C:\vcpkg\vcpkg install --clean-after-build
 
+      # 🦀 Rust
       - name: Install Rust
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
-          echo "%USERPROFILE%\.cargo\bin" >> $env:GITHUB_PATH
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      # 🏗️ Build
       - name: Build
         run: cargo build --release
 
+      # 📤 Upload
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
