@@ -9,11 +9,10 @@ jobs:
 
     env:
       VCPKG_ROOT: C:\vcpkg
-      # Variáveis para o Hardcode (O RustDesk as lê durante o build)
+      # Hardcode dos seus dados
       RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
       RS_PUB_KEY: ${{ vars.RS_PUB_KEY }}
       API_SERVER: ${{ vars.API_SERVER }}
-      # Desativa o cache problemático que causou aviso no seu log
       VCPKG_BINARY_SOURCES: "clear"
 
     steps:
@@ -22,13 +21,13 @@ jobs:
         with:
           submodules: recursive
 
-      # CORREÇÃO CRÍTICA: Instala ferramentas de compilação que o pacote 'aom' exige
+      # 1. Instalação manual de ferramentas globais (Resolve 90% dos erros do aom)
       - name: Install Build Tools (NASM/Perl)
         run: |
           choco install nasm strawberryperl llvm -y
-          # Garante que o NASM esteja no PATH para o Ninja encontrar
           "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      # 2. Setup vcpkg limpo
       - name: Setup vcpkg
         run: |
           if (!(Test-Path "C:\vcpkg")) {
@@ -37,15 +36,18 @@ jobs:
             .\bootstrap-vcpkg.bat
           }
 
-      # Instala dependências usando os overlays do próprio RustDesk
-      # Adicionado o --no-parallel para evitar que o Ninja quebre na config do 'aom'
-      - name: Install vcpkg dependencies
+      # 3. Instalação das dependências (Dividida para evitar erro de concorrência do Ninja)
+      - name: Install vcpkg dependencies (Sequential)
         run: |
+          # Primeiro o pacote problemático sozinho e sem paralelismo
+          C:\vcpkg\vcpkg install aom:x64-windows --overlay-ports=./res/vcpkg/aom --clean-after-build
+          
+          # Depois os demais pacotes
           C:\vcpkg\vcpkg install `
-            --overlay-ports=./res/vcpkg/aom `
             --overlay-ports=./res/vcpkg/libvpx `
             --overlay-ports=./res/vcpkg/libyuv `
             --overlay-ports=./res/vcpkg/mfx-dispatch `
+            opus:x64-windows libjpeg-turbo:x64-windows `
             --clean-after-build
 
       - name: Setup Rust
@@ -54,15 +56,10 @@ jobs:
           toolchain: stable
           target: x86_64-pc-windows-msvc
 
-      # Injeta os dados no código antes de compilar para garantir o Hardcode
-      - name: Inject Hardcoded Config
-        run: |
-          echo "Configurando servidor: $env:RENDEZVOUS_SERVER"
-          # O RustDesk compila essas env vars dentro do binário automaticamente
-
+      # 4. Compilação com os dados embutidos
       - name: Build Release
         run: |
-          # Vcpkg integration e build
+          # O cargo usará as variáveis de ambiente definidas no topo do YAML
           cargo build --release
 
       - name: Upload Cliente Customizado
