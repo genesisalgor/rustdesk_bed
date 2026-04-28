@@ -10,6 +10,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       VCPKG_ROOT: C:\vcpkg
+      VCPKG_FORCE_SYSTEM_BINARIES: 1
       RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
       RELAY_SERVER: ${{ vars.RELAY_SERVER }}
       API_SERVER: ${{ vars.API_SERVER }}
@@ -21,14 +22,25 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install vcpkg
+      - name: Install vcpkg (fixed version)
         run: |
           git clone https://github.com/microsoft/vcpkg C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
+          cd C:\vcpkg
+          git checkout 2024.05.24
+          .\bootstrap-vcpkg.bat
 
-      # ✅ CORREÇÃO AQUI
-      - name: Install dependencies (manifest mode)
-        run: C:\vcpkg\vcpkg install
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\vcpkg\installed
+            C:\vcpkg\packages
+            C:\vcpkg\buildtrees
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
+
+      - name: Install dependencies
+        run: |
+          C:\vcpkg\vcpkg install || C:\vcpkg\vcpkg install
 
       - name: Install Rust
         run: |
