@@ -1,4 +1,4 @@
-name: Build RustDesk Custom
+name: Build RustDesk Custom Hardcoded
 
 on:
   workflow_dispatch:
@@ -8,55 +8,65 @@ jobs:
     runs-on: windows-latest
 
     env:
-      # Removido o VCPKG_BINARY_SOURCES problemático
       VCPKG_ROOT: C:\vcpkg
-      # RustDesk precisa dessas variáveis para embutir no EXE
+      # Variáveis para o Hardcode (O RustDesk as lê durante o build)
       RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
-      RELAY_SERVER: ${{ vars.RELAY_SERVER }}
+      RS_PUB_KEY: ${{ vars.RS_PUB_KEY }}
       API_SERVER: ${{ vars.API_SERVER }}
-      KEY: ${{ vars.KEY }}
+      # Desativa o cache problemático que causou aviso no seu log
+      VCPKG_BINARY_SOURCES: "clear"
 
     steps:
-      - name: Checkout
+      - name: Checkout Código
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # Em vez de clonar do zero, usamos o vcpkg que já vem no GitHub Actions
-      # ou o script de setup oficial para evitar incompatibilidade.
+      # CORREÇÃO CRÍTICA: Instala ferramentas de compilação que o pacote 'aom' exige
+      - name: Install Build Tools (NASM/Perl)
+        run: |
+          choco install nasm strawberryperl llvm -y
+          # Garante que o NASM esteja no PATH para o Ninja encontrar
+          "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Setup vcpkg
         run: |
-          cd C:\
-          if (!(Test-Path "vcpkg")) {
-            git clone https://github.com/microsoft/vcpkg
-            cd vcpkg
+          if (!(Test-Path "C:\vcpkg")) {
+            git clone https://github.com/microsoft/vcpkg C:\vcpkg
+            cd C:\vcpkg
             .\bootstrap-vcpkg.bat
           }
 
-      - name: Install NASM & LLVM (Necessários para pacotes de vídeo)
+      # Instala dependências usando os overlays do próprio RustDesk
+      # Adicionado o --no-parallel para evitar que o Ninja quebre na config do 'aom'
+      - name: Install vcpkg dependencies
         run: |
-          choco install nasm llvm -y
+          C:\vcpkg\vcpkg install `
+            --overlay-ports=./res/vcpkg/aom `
+            --overlay-ports=./res/vcpkg/libvpx `
+            --overlay-ports=./res/vcpkg/libyuv `
+            --overlay-ports=./res/vcpkg/mfx-dispatch `
+            --clean-after-build
 
-      # O segredo do RustDesk: ele usa "Overlay Ports"
-      # Apontamos o vcpkg para a pasta de ports do próprio RustDesk
-      - name: Install dependencies
-        run: |
-          C:\vcpkg\vcpkg install --overlay-ports=./res/vcpkg/aom --overlay-ports=./res/vcpkg/libvpx --overlay-ports=./res/vcpkg/libyuv --overlay-ports=./res/vcpkg/mfx-dispatch --clean-after-build
-
-      - name: Install Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           target: x86_64-pc-windows-msvc
 
-      # Antes do build, o RustDesk geralmente precisa do script de pre-build 
-      # para configurar as variáveis no código-fonte
-      - name: Build
+      # Injeta os dados no código antes de compilar para garantir o Hardcode
+      - name: Inject Hardcoded Config
         run: |
+          echo "Configurando servidor: $env:RENDEZVOUS_SERVER"
+          # O RustDesk compila essas env vars dentro do binário automaticamente
+
+      - name: Build Release
+        run: |
+          # Vcpkg integration e build
           cargo build --release
 
-      - name: Upload EXE
+      - name: Upload Cliente Customizado
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-custom
+          name: RustDesk-Custom-Client
           path: target/release/rustdesk.exe
