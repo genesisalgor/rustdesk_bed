@@ -9,7 +9,6 @@ jobs:
 
     env:
       VCPKG_ROOT: C:\vcpkg
-      # Hardcode dos seus dados
       RENDEZVOUS_SERVER: ${{ vars.RENDEZVOUS_SERVER }}
       RS_PUB_KEY: ${{ vars.RS_PUB_KEY }}
       API_SERVER: ${{ vars.API_SERVER }}
@@ -21,13 +20,20 @@ jobs:
         with:
           submodules: recursive
 
-      # 1. Instalação manual de ferramentas globais (Resolve 90% dos erros do aom)
-      - name: Install Build Tools (NASM/Perl)
+      - name: Install Build Tools (NASM/Perl/LLVM)
         run: |
           choco install nasm strawberryperl llvm -y
-          "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Força a atualização do PATH na sessão atual do Runner
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      # 2. Setup vcpkg limpo
+      - name: Verify Tools (Anti-Aposta Step)
+        run: |
+          nasm --version
+          perl --version
+          cmake --version
+          # Se algum desses falhar, o build para aqui e a gente sabe o porquê
+
       - name: Setup vcpkg
         run: |
           if (!(Test-Path "C:\vcpkg")) {
@@ -36,18 +42,16 @@ jobs:
             .\bootstrap-vcpkg.bat
           }
 
-      # 3. Instalação das dependências (Dividida para evitar erro de concorrência do Ninja)
-      - name: Install vcpkg dependencies (Sequential)
+      - name: Install vcpkg dependencies
         run: |
-          # Primeiro o pacote problemático sozinho e sem paralelismo
-          C:\vcpkg\vcpkg install aom:x64-windows --overlay-ports=./res/vcpkg/aom --clean-after-build
-          
-          # Depois os demais pacotes
+          # Rodando o install no modo manifest (lendo o vcpkg.json)
+          # Os overlays garantem que o vcpkg use as correções do RustDesk
           C:\vcpkg\vcpkg install `
+            --triplet x64-windows `
+            --overlay-ports=./res/vcpkg/aom `
             --overlay-ports=./res/vcpkg/libvpx `
             --overlay-ports=./res/vcpkg/libyuv `
             --overlay-ports=./res/vcpkg/mfx-dispatch `
-            opus:x64-windows libjpeg-turbo:x64-windows `
             --clean-after-build
 
       - name: Setup Rust
@@ -56,14 +60,13 @@ jobs:
           toolchain: stable
           target: x86_64-pc-windows-msvc
 
-      # 4. Compilação com os dados embutidos
-      - name: Build Release
+      - name: Build Release (Hardcoding happens here)
         run: |
-          # O cargo usará as variáveis de ambiente definidas no topo do YAML
+          # Aqui os dados do seu servidor entram no binário
           cargo build --release
 
-      - name: Upload Cliente Customizado
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: RustDesk-Custom-Client
+          name: RustDesk-Custom-Hardcoded
           path: target/release/rustdesk.exe
